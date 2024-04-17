@@ -7,25 +7,30 @@
 #include <string.h>
 
 #define LOCK_FILE "/home/matete/Documentos/Facu/SoftwareLibre/MyDaemon/daemon.pid"
+#define PATH_TRASH "/home/matete/.local/share/Trash/files/*.txt"
 
 void eliminarTxtPapelera ();
-int create_lock_file();
+int obtenerPidArchivo();
+int buscaArchivo();
 void salirError();
 static void skeleton_daemon();
 int main();
 void setearPidArchivo();
 
 void eliminarTxtPapelera (){
-    system("rm /home/matete/.local/share/Trash/files/*.txt");
+    char cmd[1024];
+    strcpy(cmd,"rm ");
+    strcat(cmd,PATH_TRASH);
+    system(cmd);
 }
 
-int create_lock_file() {
+int buscaArchivo() {
 
     FILE *fd;
     fd = fopen(LOCK_FILE, "r");
-    if ( fd != NULL) {
+    if ( fd != NULL) {          //hay archivo = 1
         fclose(fd);
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -100,20 +105,29 @@ static void skeleton_daemon(){
 
 int main(int argc,char *argv[])
 {
-    if (argc <= 1 || argc>2 || (strcmp(argv[1],"start")!=0 && strcmp(argv[1],"stop")!=0)){
-        printf("Error ./mydeamon start or ./mydeamon stop\n");
+    int hayArchivo = buscaArchivo();
+
+    if (argc <= 1 || argc>2 || (strcmp(argv[1],"start")!=0 && strcmp(argv[1],"stop")!=0) && strcmp(argv[1],"info")!=0){
+        printf("Error ./mydeamon start or ./mydeamon stop or ./mydeamon info\n");
         exit(EXIT_FAILURE);
     }
-    if (strcmp(argv[1],"start")==0 && create_lock_file() == -1) {
+    if (strcmp(argv[1],"info")==0){
+        printf("Daemon info\n");
+        printf("./daemon start -> inicia el daemon\n");
+        printf("./daemon stop  -> detiene el daemon\n");
+        printf("./daemon info  -> informacion de parametros\n");
+        exit(EXIT_SUCCESS);
+    }
+    if (strcmp(argv[1],"start")==0 && hayArchivo) {
         printf("El daemon ya está en ejecución.\n");
         exit(EXIT_FAILURE);
     }
-    if (strcmp(argv[1],"stop")==0 && create_lock_file() == -1) {
+    if (strcmp(argv[1],"stop")==0 && hayArchivo) {
         kill(obtenerPidArchivo(),SIGTERM);
         remove(LOCK_FILE);
         exit(EXIT_SUCCESS);
     }
-    if (strcmp(argv[1],"stop")==0 && create_lock_file() == 0) {
+    if (strcmp(argv[1],"stop")==0 && !hayArchivo) {
         printf("El deamon no esta en ejecución.\n");
         exit(EXIT_SUCCESS);
     }
