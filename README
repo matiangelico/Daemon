@@ -1,0 +1,11 @@
+Especificar en codigo path de LOCK_FILE
+Especificar en codigo path a Papelera PATH_TRASH
+
+Compilar :  gcc -o mydaemon main.c
+Ejecutar :  ./mydaemon start
+Detener  :  ./mydaemon stop
+Info     :  ./mydaemon info
+
+Archivo daemon.pid -> se crea en LOCK_FILE cuando Daemon esta en ejecucion y se elimina cuando este se detiene
+
+Funcionalidad Daemon -> Eliminar archivos txt de papelera cada 20 segundos jaja
