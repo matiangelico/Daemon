@@ -10,7 +10,6 @@
 #include <dirent.h>
 
 #define LOCK_FILE "/home/matete/Documentos/Facu/SoftwareLibre/MyDaemon/daemon.pid"
-#define LOCK_FILE_LOG "/home/matete/Documentos/Facu/SoftwareLibre/MyDaemon/log.txt"
 #define TEXT "El porcentaje utilizado de la carpeta es de "
 
 float espAnt = 0.0;
@@ -70,14 +69,6 @@ void notificacionEnvio(char* text){
     strcat(instruccion,text);
     strcat(instruccion,"\" | mail -s \"Estado de Carpeta\" matete@matete");
     system(instruccion);
-    /*
-    char log[200] = TEXT;
-    strcat(log,text);
-    FILE *fd;
-    fd = fopen(LOCK_FILE_LOG,"w+");
-    fprintf(fd,"%s \n",log);       // Escribir el PID del proceso en el archivo de bloqueo
-    fclose(fd);
-    */
 }
 
 void verificar(char* carpeta, int limite){
@@ -216,7 +207,7 @@ int main(int argc,char *argv[])
         exit(EXIT_FAILURE);
     }
     char *endptr;
-    long int numero = strtol(argv[3], &endptr, 10);
+    int numero = strtol(argv[3], &endptr, 10);
     if (*endptr != '\0') {
         printf("ERROR: El limite no es un número válido.\n");
         exit(EXIT_FAILURE);
@@ -230,7 +221,7 @@ int main(int argc,char *argv[])
 
     while (1)
     {
-        verificar("/home/matete/Documentos/Facu",1000);
+        verificar(argv[2],numero);
         sleep(20);
     }
 }
