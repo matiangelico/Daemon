@@ -1,11 +1,15 @@
 Especificar en codigo path de LOCK_FILE
-Especificar en codigo path a Papelera PATH_TRASH
 
 Compilar :  gcc -o mydaemon main.c
-Ejecutar :  ./mydaemon start
+Ejecutar :  ./mydaemon start [path] [limit(int)]
 Detener  :  ./mydaemon stop
 Info     :  ./mydaemon info
 
 Archivo daemon.pid -> se crea en LOCK_FILE cuando Daemon esta en ejecucion y se elimina cuando este se detiene
 
-Funcionalidad Daemon -> Eliminar archivos txt de papelera cada 20 segundos jaja
+Funcionalidad Daemon -> Comprueba espacio utilizado de carpeta ingresada por parametro 
+junto con el limite tambien ingresado por parametro. Cuando supera 25%, 50%, 75% o 90% 
+envia un correo local. Lo mismo cuando el espacio utilizado baja estos niveles.
+
+Al iniciar o detener el daemon hace un ingreso en archivo de log y ademas cuando el 
+espacio utilizado supera el 90%.

@@ -5,23 +5,99 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <string.h>
+#include <syslog.h>
+#include <sys/statvfs.h>
+#include <dirent.h>
 
 #define LOCK_FILE "/home/matete/Documentos/Facu/SoftwareLibre/MyDaemon/daemon.pid"
-#define PATH_TRASH "/home/matete/.local/share/Trash/files/*.txt"
+#define LOCK_FILE_LOG "/home/matete/Documentos/Facu/SoftwareLibre/MyDaemon/log.txt"
+#define TEXT "El porcentaje utilizado de la carpeta es de "
 
-void eliminarTxtPapelera ();
+float espAnt = 0.0;
+
 int obtenerPidArchivo();
 int buscaArchivo();
 void salirError();
 static void skeleton_daemon();
 int main();
 void setearPidArchivo();
+void handler(int signum);
 
-void eliminarTxtPapelera (){
-    char cmd[1024];
-    strcpy(cmd,"rm ");
-    strcat(cmd,PATH_TRASH);
-    system(cmd);
+unsigned long long obtener_espacio_utilizado(char *carpeta) {
+    unsigned long long espacio_utilizado = 0;
+    DIR *dir;
+    struct dirent *entry;
+    struct stat statbuf;
+
+    dir = opendir(carpeta) ;
+
+    chdir(carpeta);
+    // Itera sobre los archivos en el directorio
+    while ((entry = readdir(dir)) != NULL) {
+        // Ignora las entradas "." y ".."
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+
+       // Obtiene la información del archivo
+        if (stat(entry->d_name, &statbuf) == -1) {
+            perror("stat");
+            continue;
+        }
+
+        // Si es un directorio, recursivamente calcula su tamaño
+        if (S_ISDIR(statbuf.st_mode)) {
+            espacio_utilizado += obtener_espacio_utilizado(entry->d_name);
+        } else {
+            // Suma el tamaño del archivo
+            espacio_utilizado += statbuf.st_size;
+        }
+    }
+
+    // Cierra el directorio
+    closedir(dir);
+
+    // Regresa al directorio padre
+    chdir("..");
+
+    return espacio_utilizado;
+}
+
+void notificacionEnvio(char* text){
+
+    char instruccion[200]= "echo \"";
+    strcat(instruccion,TEXT);
+    strcat(instruccion,text);
+    strcat(instruccion,"\" | mail -s \"Estado de Carpeta\" matete@matete");
+    system(instruccion);
+    /*
+    char log[200] = TEXT;
+    strcat(log,text);
+    FILE *fd;
+    fd = fopen(LOCK_FILE_LOG,"w+");
+    fprintf(fd,"%s \n",log);       // Escribir el PID del proceso en el archivo de bloqueo
+    fclose(fd);
+    */
+}
+
+void verificar(char* carpeta, int limite){
+    unsigned int espacioUtilizadoKb = obtener_espacio_utilizado(carpeta)/1024;
+    float espAct = (float)espacioUtilizadoKb*100/limite;
+    char espacio[10];
+    snprintf(espacio, sizeof(espacio), "%.2f", espAct);
+    if ((espAnt == 0.0)||(espAct>25 && espAnt<25)||(espAct>50 && espAnt<50)||(espAct>75 && espAnt<75)||(espAct>90 && espAnt<90)) {
+        if (espAct > 90 && espAnt < 90) {
+            syslog(LOG_NOTICE,"La capacidad de la carpeta ha superado el 90 %%");
+        }
+        espAnt = espAct;
+        notificacionEnvio(espacio);
+     }
+
+    if ((espAct<25 && espAnt>25)||(espAct>25 && espAct<50 && espAnt>50)||(espAct>50 && espAct<75 && espAnt>75)||(espAct>75 && espAct<90 && espAnt>90)) {
+        espAnt = espAct;
+        notificacionEnvio(espacio);
+     }
+
 }
 
 int buscaArchivo() {
@@ -35,30 +111,28 @@ int buscaArchivo() {
     return 0;
 }
 
+void handler(int signum){
+    if (signum == SIGTERM){
+        syslog (LOG_NOTICE," mydeamon finished.");
+        closelog();
+        remove(LOCK_FILE);
+        exit(EXIT_SUCCESS);
+    }
+}
+
 void setearPidArchivo(int pid){
-
     FILE *fd;
-
     fd = fopen(LOCK_FILE,"a+");
-
     fprintf(fd,"%d \n",pid);       // Escribir el PID del proceso en el archivo de bloqueo
-
     fclose(fd);
-
 }
 
 int obtenerPidArchivo(){
-
     char pid[5];
-
     FILE *fd;
-
     fd = fopen(LOCK_FILE,"r");
-
     fread(pid,sizeof(pid),1,fd);       // Escribir el PID del proceso en el archivo de bloqueo
-
     fclose(fd);
-
     return atoi(pid);
 }
 
@@ -101,44 +175,62 @@ static void skeleton_daemon(){
 
     for (int x = sysconf(_SC_OPEN_MAX); x>=0; x--) close (x);      // Cierra todos los descriptores
 
+    /* Open the log file */
+    openlog ("mydaemon",LOG_PID, LOG_DAEMON);
+    syslog(LOG_NOTICE,"mydeamon started.");
 }
 
 int main(int argc,char *argv[])
 {
     int hayArchivo = buscaArchivo();
 
-    if (argc <= 1 || argc>2 || (strcmp(argv[1],"start")!=0 && strcmp(argv[1],"stop")!=0) && strcmp(argv[1],"info")!=0){
-        printf("Error ./mydeamon start or ./mydeamon stop or ./mydeamon info\n");
-        exit(EXIT_FAILURE);
-    }
-    if (strcmp(argv[1],"info")==0){
+    if (argc == 2 && strcmp(argv[1],"info")==0){
         printf("Daemon info\n");
-        printf("./daemon start -> inicia el daemon\n");
+        printf("./daemon start [path] [limit]-> inicia el daemon\n");
         printf("./daemon stop  -> detiene el daemon\n");
-        printf("./daemon info  -> informacion de parametros\n");
+
         exit(EXIT_SUCCESS);
     }
-    if (strcmp(argv[1],"start")==0 && hayArchivo) {
-        printf("El daemon ya está en ejecución.\n");
+
+    if (argc == 2 && strcmp(argv[1],"stop")==0 && hayArchivo) {
+        kill(obtenerPidArchivo(),SIGTERM);
+        exit(EXIT_SUCCESS);
+    }
+    if (argc == 2 && strcmp(argv[1],"stop")==0 && !hayArchivo) {
+        printf("ERROR: El deamon no esta en ejecución.\n");
+        exit(EXIT_SUCCESS);
+    }
+
+    if (argc <= 3 || argc>4 || (strcmp(argv[1],"start")!=0 && strcmp(argv[1],"stop")!=0) && strcmp(argv[1],"info")!=0){
+        printf("Error ./mydeamon info para mayor informacion\n");
         exit(EXIT_FAILURE);
     }
-    if (strcmp(argv[1],"stop")==0 && hayArchivo) {
-        kill(obtenerPidArchivo(),SIGTERM);
-        remove(LOCK_FILE);
-        exit(EXIT_SUCCESS);
+
+    if (strcmp(argv[1],"start")==0 && hayArchivo) {
+        printf("ERROR: El daemon ya está en ejecución.\n");
+        exit(EXIT_FAILURE);
     }
-    if (strcmp(argv[1],"stop")==0 && !hayArchivo) {
-        printf("El deamon no esta en ejecución.\n");
-        exit(EXIT_SUCCESS);
+
+    if (opendir(argv[2]) == NULL){
+        printf("ERROR: No se pudo abrir el directorio %s\n", argv[2]);
+        exit(EXIT_FAILURE);
+    }
+    char *endptr;
+    long int numero = strtol(argv[3], &endptr, 10);
+    if (*endptr != '\0') {
+        printf("ERROR: El limite no es un número válido.\n");
+        exit(EXIT_FAILURE);
     }
 
     skeleton_daemon();
 
     setearPidArchivo(getpid());
 
+    signal(SIGTERM, handler);
+
     while (1)
     {
-        eliminarTxtPapelera();
+        verificar("/home/matete/Documentos/Facu",1000);
         sleep(20);
     }
 }
