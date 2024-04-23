@@ -62,12 +62,19 @@ unsigned long long obtener_espacio_utilizado(char *carpeta) {
     return espacio_utilizado;
 }
 
-void notificacionEnvio(char* text){
+void notificacionEnvio(char* text,char* carpeta){
 
-    char instruccion[200]= "echo \"";
-    strcat(instruccion,TEXT);
-    strcat(instruccion,text);
-    strcat(instruccion,"\" | mail -s \"Estado de Carpeta\" matete@matete");
+    char instruccion[300]= "echo \"";
+    if (strcmp(text,"Comenzo el monitoreo de la carpeta ")==0 || strcmp(text,"Finalizo el monitoreo de la carpeta ")==0)
+        strcat(instruccion,text);
+    else{
+        strcat(instruccion,TEXT);
+        strcat(instruccion,text);
+        strcat(instruccion,"%");
+    }
+    strcat(instruccion,"\" | mail -s \"Estado de Carpeta\"");
+    strcat(instruccion,carpeta);
+    strcat(instruccion," matete@matete");
     system(instruccion);
 }
 
@@ -81,12 +88,12 @@ void verificar(char* carpeta, int limite){
             syslog(LOG_NOTICE,"La capacidad de la carpeta ha superado el 90 %%");
         }
         espAnt = espAct;
-        notificacionEnvio(espacio);
+        notificacionEnvio(espacio,carpeta);
      }
 
     if ((espAct<25 && espAnt>25)||(espAct>25 && espAct<50 && espAnt>50)||(espAct>50 && espAct<75 && espAnt>75)||(espAct>75 && espAct<90 && espAnt>90)) {
         espAnt = espAct;
-        notificacionEnvio(espacio);
+        notificacionEnvio(espacio,carpeta);
      }
 
 }
@@ -185,6 +192,7 @@ int main(int argc,char *argv[])
 
     if (argc == 2 && strcmp(argv[1],"stop")==0 && hayArchivo) {
         kill(obtenerPidArchivo(),SIGTERM);
+        notificacionEnvio("Finalizo el monitoreo de la carpeta "," ");
         exit(EXIT_SUCCESS);
     }
     if (argc == 2 && strcmp(argv[1],"stop")==0 && !hayArchivo) {
@@ -218,6 +226,8 @@ int main(int argc,char *argv[])
     setearPidArchivo(getpid());
 
     signal(SIGTERM, handler);
+
+    notificacionEnvio("Comenzo el monitoreo de la carpeta ",argv[2]);
 
     while (1)
     {
